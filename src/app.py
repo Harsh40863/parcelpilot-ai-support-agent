@@ -42,6 +42,10 @@ def init_session():
         "email": None,
         "account_id": None,
         "active_thread_id": None,
+        "stop_requested": False,
+        "partial_text": "",
+        "partial_tools": [],
+        "is_streaming": False,
     }
     for key, val in defaults.items():
         if key not in st.session_state:
@@ -215,13 +219,28 @@ def stream_agent_response(graph, input_data, config: dict):
     tools_used = []
     text_placeholder = st.empty()
     status_placeholder = st.empty()
+    stop_button_placeholder = st.empty()
+
+    st.session_state.is_streaming = True
+    st.session_state.partial_text = ""
+    st.session_state.stop_requested = False
+
+    def stop_callback():
+        st.session_state.stop_requested = True
+
+    # Render Stop button while streaming
+    stop_button_placeholder.button("⏹ Stop", on_click=stop_callback, key="stop_stream_btn")
 
     try:
         for msg, metadata in graph.stream(input_data, config=config, stream_mode="messages"):
+            if st.session_state.stop_requested:
+                break
+
             if isinstance(msg, AIMessageChunk):
                 if msg.content:
                     full_text += msg.content
                     text_placeholder.markdown(full_text)
+                    st.session_state.partial_text = full_text
                 if hasattr(msg, "tool_calls") and msg.tool_calls:
                     for tc in msg.tool_calls:
                         name = tc.get("name")
@@ -239,6 +258,8 @@ def stream_agent_response(graph, input_data, config: dict):
             st.error(f"⚠️ Error: {str(e)}")
 
     status_placeholder.empty()
+    stop_button_placeholder.empty()
+    st.session_state.is_streaming = False
     return full_text, tools_used
 
 
@@ -315,6 +336,21 @@ def render_chat():
         return
 
     st.caption(f"Thread: `{thread_id[:16]}…`")
+
+    # ── Check if the user requested to stop the current stream ───────────
+    if st.session_state.stop_requested:
+        partial_text = st.session_state.partial_text
+        if partial_text:
+            config = _make_config(thread_id, account_id)
+            stopped_msg = AIMessage(
+                content=f"{partial_text}\n\n*⏹ Stopped by user*"
+            )
+            graph.update_state(config, {"messages": [stopped_msg]})
+        st.session_state.stop_requested = False
+        st.session_state.partial_text = ""
+        st.session_state.partial_tools = []
+        st.session_state.is_streaming = False
+        st.rerun()
 
     # ── Load and display past messages ───────────────────────────────────
     messages = load_thread_messages(graph, thread_id, account_id)
