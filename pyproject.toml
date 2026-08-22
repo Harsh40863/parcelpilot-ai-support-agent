@@ -1,0 +1,29 @@
+[project]
+name = "parcelpilot-chatbot"
+version = "0.1.0"
+description = "Add your description here"
+requires-python = ">=3.11"
+dependencies = [
+    "bcrypt>=5.0.0",
+    "faiss-cpu>=1.15.0",
+    "langchain>=1.3.16",
+    "langchain-community>=0.4.2",
+    "langchain-groq>=1.1.3",
+    "langchain-huggingface>=1.2.2",
+    "langgraph-checkpoint-sqlite>=3.1.1",
+    "openpyxl>=3.1.5",
+    "pandas>=3.0.5",
+    "pymongo>=4.17.0",
+    "pymupdf>=1.28.2",
+    "python-dotenv>=1.2.3",
+    "sentence-transformers>=6.0.0",
+    "streamlit>=1.62.0",
+    "tiktoken>=0.14.0",
+]
+
+[project.scripts]
+parcelpilot-chatbot = "parcelpilot_chatbot:main"
+
+[build-system]
+requires = ["uv_build>=0.12.3,<0.13.0"]
+build-backend = "uv_build"
