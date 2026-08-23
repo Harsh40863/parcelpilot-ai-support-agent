@@ -69,9 +69,9 @@ init_session()
 
 
 def get_cookie_manager():
-    if "cookie_manager" not in st.session_state:
-        st.session_state.cookie_manager = stx.CookieManager(key="cookie_manager")
-    return st.session_state.cookie_manager
+    if "cookie_manager_instance" not in st.session_state:
+        st.session_state.cookie_manager_instance = stx.CookieManager(key="cookie_manager_widget")
+    return st.session_state.cookie_manager_instance
 
 
 def check_jwt_cookie():
