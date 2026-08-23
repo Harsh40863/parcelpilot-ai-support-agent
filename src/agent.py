@@ -78,7 +78,7 @@ def tool_search_docs(query: str, version: str = None, k: int = 3,
     service credit procedures, known issues, and contract-specific terms.
     Args:
         query: Natural language search query.
-        version: Optional version filter (e.g. 'v3_current', 'v2_deprecated').
+        version: Optional version filter. Must be exactly one of: 'v4' (current Cancellation SOP), 'v3_current' (previous Cancellation SOP), 'v2_deprecated' (old Cancellation SOP), 'v1' (agreements).
         k: Number of results to return (default 3).
     """
     scope = _get_scope(_get_account_id(config))
