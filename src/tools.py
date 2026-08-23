@@ -91,19 +91,28 @@ def search_docs(
             return False
         return True
 
-    # Only pass the filter if we actually need one
     needs_filter = scope is not None or version is not None
-    results = vs.similarity_search_with_score(
-        query, k=k, filter=meta_filter if needs_filter else None
+
+    # MMR (Maximal Marginal Relevance): fetches fetch_k=20 candidates by
+    # similarity, then picks k results that balance relevance + diversity.
+    # lambda_mult=0.7 — leans toward relevance (1.0=pure similarity, 0.0=pure diversity).
+    # This prevents returning 5 near-identical chunks from the same paragraph
+    # and ensures the agent gets context across multiple documents when relevant.
+    results = vs.max_marginal_relevance_search(
+        query,
+        k=k,
+        fetch_k=20,
+        lambda_mult=0.7,
+        filter=meta_filter if needs_filter else None,
     )
 
     return [
         {
             "content": doc.page_content,
             "metadata": doc.metadata,
-            "score": float(score),
+            "score": 1.0,  # MMR does not return scores; placeholder for schema compat
         }
-        for doc, score in results
+        for doc in results
     ]
 
 

@@ -85,6 +85,11 @@ def build_token_splitter() -> RecursiveCharacterTextSplitter:
     Build a text splitter that measures length in tokens (cl100k_base)
     rather than raw characters, so chunk boundaries are more meaningful
     for policy-style text.
+
+    chunk_size=1000: Large enough to capture complete policy clauses
+    and multi-paragraph sections even in large future documents.
+    chunk_overlap=150: 15% overlap preserves sentence context at
+    boundaries — important when policy clauses span chunk edges.
     """
     enc = tiktoken.get_encoding("cl100k_base")
 
@@ -92,8 +97,8 @@ def build_token_splitter() -> RecursiveCharacterTextSplitter:
         return len(enc.encode(text))
 
     return RecursiveCharacterTextSplitter(
-        chunk_size=500,
-        chunk_overlap=50,
+        chunk_size=1000,
+        chunk_overlap=150,
         length_function=token_length,
     )
 

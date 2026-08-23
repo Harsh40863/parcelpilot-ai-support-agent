@@ -71,7 +71,7 @@ def _get_scope(account_id: str) -> str:
 
 
 @tool
-def tool_search_docs(query: str, version: str | None = None, k: int = 3,
+def tool_search_docs(query: str, version: str | None = None, k: int = 5,
                      config: RunnableConfig = None) -> list[dict] | str:
     """Search ParcelPilot's policy documents and knowledge base.
     Use this to look up support policies, cancellation rules, SLA terms,
@@ -79,7 +79,7 @@ def tool_search_docs(query: str, version: str | None = None, k: int = 3,
     Args:
         query: Natural language search query.
         version: Optional version filter. Must be exactly one of: 'v4' (current Cancellation SOP), 'v3_current' (previous Cancellation SOP), 'v2_deprecated' (old Cancellation SOP), 'v1' (agreements).
-        k: Number of results to return (default 3).
+        k: Number of results to return (default 5).
     """
     scope = _get_scope(_get_account_id(config))
     res = search_docs(query=query, scope=scope, version=version, k=k)
