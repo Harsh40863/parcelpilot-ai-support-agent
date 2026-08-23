@@ -68,9 +68,10 @@ def init_session():
 init_session()
 
 
-@st.cache_resource
 def get_cookie_manager():
-    return stx.CookieManager(key="cookie_manager")
+    if "cookie_manager" not in st.session_state:
+        st.session_state.cookie_manager = stx.CookieManager(key="cookie_manager")
+    return st.session_state.cookie_manager
 
 
 def check_jwt_cookie():
