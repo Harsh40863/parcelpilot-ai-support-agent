@@ -537,7 +537,8 @@ def main():
     
     if not st.session_state.get("cookie_check_done", False):
         st.markdown("### Loading ParcelPilot Support...")
-        st.spinner("Checking your session...")
+        with st.spinner("Checking your session..."):
+            st.write("")
         st.stop()
         
     if not st.session_state.authenticated:
