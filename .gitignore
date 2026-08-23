@@ -35,10 +35,15 @@ env/
 .streamlit/
 
 # Local databases and memory stores (we re-generate these via scripts)
-data/processed/
+data/processed/*
+!data/processed/.gitkeep
+!data/processed/parcelpilot.db
+!data/processed/chat_memory.db
+!data/processed/faiss_index/
 *.db
 *.json
-!data/processed/.gitkeep
+!data/processed/parcelpilot.db
+!data/processed/chat_memory.db
 
 # Environment files (sensitive credentials)
 .env
