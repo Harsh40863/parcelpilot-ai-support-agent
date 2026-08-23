@@ -282,7 +282,7 @@ def create_escalation(
         "ticket_id": ticket_id,
         "account_id": account_id,
         "reason": reason,
-        "status": status,
+        "status": "escalated",
         "created_at": datetime.now().isoformat(),
     }
     escalations.append(record)
