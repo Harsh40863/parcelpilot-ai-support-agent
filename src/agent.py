@@ -72,7 +72,7 @@ def _get_scope(account_id: str) -> str:
 
 @tool
 def tool_search_docs(query: str, version: str = None, k: int = 3,
-                     config: RunnableConfig = None) -> list[dict]:
+                     config: RunnableConfig = None) -> list[dict] | str:
     """Search ParcelPilot's policy documents and knowledge base.
     Use this to look up support policies, cancellation rules, SLA terms,
     service credit procedures, known issues, and contract-specific terms.
@@ -82,57 +82,75 @@ def tool_search_docs(query: str, version: str = None, k: int = 3,
         k: Number of results to return (default 3).
     """
     scope = _get_scope(_get_account_id(config))
-    return search_docs(query=query, scope=scope, version=version, k=k)
+    res = search_docs(query=query, scope=scope, version=version, k=k)
+    if not res:
+        return "No results found."
+    return res
 
 
 @tool
-def tool_get_account(config: RunnableConfig = None) -> dict | None:
+def tool_get_account(config: RunnableConfig = None) -> dict | str:
     """Look up the current customer's account details (plan, CSM, status, etc.).
     No arguments needed — automatically scoped to the logged-in customer.
     """
-    return get_account(_get_account_id(config))
+    res = get_account(_get_account_id(config))
+    if not res:
+        return "Account not found."
+    return res
 
 
 @tool
-def tool_get_order(order_id: str, config: RunnableConfig = None) -> dict | None:
+def tool_get_order(order_id: str, config: RunnableConfig = None) -> dict | str:
     """Look up a specific order by order_id.
     Returns the order only if it belongs to the current customer.
     Args:
         order_id: The order ID to look up (e.g. 'ORD-1001').
     """
-    return get_order(order_id, _get_account_id(config))
+    res = get_order(order_id, _get_account_id(config))
+    if not res:
+        return "Order not found."
+    return res
 
 
 @tool
-def tool_get_ticket(ticket_id: str, config: RunnableConfig = None) -> dict | None:
+def tool_get_ticket(ticket_id: str, config: RunnableConfig = None) -> dict | str:
     """Look up a specific support ticket by ticket_id.
     Returns the ticket only if it belongs to the current customer.
     Args:
         ticket_id: The ticket ID to look up (e.g. 'TKT-501').
     """
-    return get_ticket(ticket_id, _get_account_id(config))
+    res = get_ticket(ticket_id, _get_account_id(config))
+    if not res:
+        return "Ticket not found."
+    return res
 
 
 @tool
-def tool_list_orders(config: RunnableConfig = None) -> list[dict]:
+def tool_list_orders(config: RunnableConfig = None) -> list[dict] | str:
     """List all orders belonging to the current customer.
     No arguments needed — automatically scoped to the logged-in customer.
     """
-    return list_orders(_get_account_id(config))
+    res = list_orders(_get_account_id(config))
+    if not res:
+        return "No orders found."
+    return res
 
 
 @tool
-def tool_list_tickets(config: RunnableConfig = None) -> list[dict]:
+def tool_list_tickets(config: RunnableConfig = None) -> list[dict] | str:
     """List all support tickets belonging to the current customer.
     No arguments needed — automatically scoped to the logged-in customer.
     """
-    return list_tickets(_get_account_id(config))
+    res = list_tickets(_get_account_id(config))
+    if not res:
+        return "No tickets found."
+    return res
 
 
 @tool
 def tool_calc_sla_status(order_id: str,
                          snapshot_time: str = "2026-08-16 11:00",
-                         config: RunnableConfig = None) -> dict | None:
+                         config: RunnableConfig = None) -> dict | str:
     """Calculate SLA/pickup timing status for an order.
     Returns factual timing data: on_time/late, hours late, carrier/customer fault.
     Does NOT decide on service credits — combine with policy docs for that.
@@ -140,8 +158,11 @@ def tool_calc_sla_status(order_id: str,
         order_id: The order to check (e.g. 'ORD-2002').
         snapshot_time: The reference 'now' time (default: dataset snapshot).
     """
-    return calc_sla_status(order_id, _get_account_id(config),
+    res = calc_sla_status(order_id, _get_account_id(config),
                            snapshot_time=snapshot_time)
+    if not res:
+        return "Order SLA status could not be calculated."
+    return res
 
 
 @tool
