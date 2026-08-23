@@ -85,6 +85,7 @@ def check_jwt_cookie():
     cookies = cookie_manager.get_all()
     
     if cookies is None:
+        st.session_state.cookie_check_done = False
         return
         
     token = cookies.get("parcelpilot_jwt")
@@ -114,8 +115,12 @@ def check_jwt_cookie():
                 st.session_state.cookie_check_done = True
                 return
     else:
-        st.session_state.cookie_check_done = True
-        st.rerun()
+        if not st.session_state.get("cookie_check_attempted"):
+            st.session_state.cookie_check_attempted = True
+            st.session_state.cookie_check_done = False
+            st.rerun()
+        else:
+            st.session_state.cookie_check_done = True
 
 
 # ═════════════════════════════════════════════════════════════════════════
@@ -528,10 +533,11 @@ def render_chat():
 # MAIN
 # ═════════════════════════════════════════════════════════════════════════
 def main():
+    check_jwt_cookie()
+    
     if not st.session_state.get("cookie_check_done", False):
         st.markdown("### Loading ParcelPilot Support...")
-        with st.spinner("Checking your session..."):
-            check_jwt_cookie()
+        st.spinner("Checking your session...")
         st.stop()
         
     if not st.session_state.authenticated:
