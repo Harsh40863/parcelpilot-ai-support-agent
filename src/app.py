@@ -59,6 +59,8 @@ def init_session():
         "partial_text": "",
         "partial_tools": [],
         "is_streaming": False,
+        "cookie_check_attempted": False,
+        "cookie_check_done": False,
     }
     for key, val in defaults.items():
         if key not in st.session_state:
@@ -75,10 +77,15 @@ def get_cookie_manager():
 
 
 def check_jwt_cookie():
+    if st.session_state.get("authenticated"):
+        st.session_state.cookie_check_done = True
+        return
+        
     cookie_manager = get_cookie_manager()
     cookies = cookie_manager.get_all()
     
     if cookies is None:
+        st.session_state.cookie_check_done = False
         st.write("Initializing session...")
         st.stop()
         
@@ -95,16 +102,27 @@ def check_jwt_cookie():
                 
                 if is_token_blacklisted(token):
                     cookie_manager.delete("parcelpilot_jwt", key="delete_blacklisted_jwt")
+                    st.session_state.cookie_check_done = True
                     return
                 
                 st.session_state.authenticated = True
                 st.session_state.email = payload["email"]
                 st.session_state.account_id = payload["account_id"]
+                st.session_state.cookie_check_done = True
                 st.rerun()
                 
             except (jwt.ExpiredSignatureError, jwt.InvalidTokenError):
                 cookie_manager.delete("parcelpilot_jwt", key="delete_expired_jwt")
+                st.session_state.cookie_check_done = True
                 return
+    else:
+        if not st.session_state.get("cookie_check_attempted"):
+            st.session_state.cookie_check_attempted = True
+            st.session_state.cookie_check_done = False
+            st.write("Initializing session...")
+            st.rerun()
+        else:
+            st.session_state.cookie_check_done = True
 
 
 # ═════════════════════════════════════════════════════════════════════════
@@ -519,6 +537,10 @@ def render_chat():
 def main():
     check_jwt_cookie()
     
+    if not st.session_state.get("cookie_check_done"):
+        st.write("Initializing session...")
+        st.stop()
+        
     if not st.session_state.authenticated:
         render_login()
     else:
