@@ -153,6 +153,9 @@ def tool_create_escalation(ticket_id: str, reason: str,
         ticket_id: The ticket to escalate (e.g. 'TKT-501').
         reason: Brief description of why escalation is needed.
     """
+    from datetime import datetime
+    now_str = datetime.now().isoformat()
+    print(f"[{now_str}] [SERVER LOG] tool_create_escalation called: ticket_id={ticket_id}, reason={reason}")
     return create_escalation(ticket_id, _get_account_id(config), reason)
 
 
@@ -177,6 +180,11 @@ HOW TO ANSWER:
 3. For SLA/timing questions: use tool_calc_sla_status to get the facts, then use tool_search_docs to find the applicable policy/SOP to determine eligibility.
 4. For escalations: call tool_create_escalation with the ticket_id and reason. The system will automatically pause and ask the customer for approval before executing — you do NOT need to ask for confirmation yourself.
 5. If you don't have enough information, say so — don't make things up.
+
+STRICT SAFEGUARDS (CRITICAL):
+- NEVER fabricate, mock, or hallucinate tool execution responses, escalation IDs (e.g., ESC-XXXXXXXX), or confirmation statuses.
+- NEVER tell the user that a ticket has been escalated, queued, or submitted based on your own generation. You are strictly forbidden from claiming success in your text responses until the tool has actually run and returned its output containing the real escalation ID and status.
+- When performing an action (like an escalation), do not output introductory text claiming it is being done or has been done. Simply invoke the tool. Only after the tool has run and returned the result to your context should you report the success details (ID, status) to the user.
 
 IMPORTANT:
 - The dataset snapshot time is 2026-08-16 11:00 Asia/Kolkata.

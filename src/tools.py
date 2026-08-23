@@ -270,6 +270,9 @@ def create_escalation(
     Returns:
         The created escalation record.
     """
+    now_str = datetime.now().isoformat()
+    print(f"[{now_str}] [SERVER LOG] create_escalation called: ticket_id={ticket_id}, account_id={account_id}, reason={reason}")
+
     # Load existing escalations (or start fresh)
     if ESCALATIONS_PATH.exists():
         with open(ESCALATIONS_PATH) as f:
