@@ -71,7 +71,7 @@ def _get_scope(account_id: str) -> str:
 
 
 @tool
-def tool_search_docs(query: str, version: str = None, k: int = 3,
+def tool_search_docs(query: str, version: str | None = None, k: int = 3,
                      config: RunnableConfig = None) -> list[dict] | str:
     """Search ParcelPilot's policy documents and knowledge base.
     Use this to look up support policies, cancellation rules, SLA terms,

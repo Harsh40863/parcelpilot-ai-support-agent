@@ -95,7 +95,6 @@ def check_jwt_cookie():
                 
                 if is_token_blacklisted(token):
                     cookie_manager.delete("parcelpilot_jwt", key="delete_blacklisted_jwt")
-                    st.rerun()
                     return
                 
                 st.session_state.authenticated = True
@@ -105,7 +104,7 @@ def check_jwt_cookie():
                 
             except (jwt.ExpiredSignatureError, jwt.InvalidTokenError):
                 cookie_manager.delete("parcelpilot_jwt", key="delete_expired_jwt")
-                st.rerun()
+                return
 
 
 # ═════════════════════════════════════════════════════════════════════════
@@ -207,7 +206,6 @@ def render_login():
             st.session_state.authenticated = True
             st.session_state.email = user["email"]
             st.session_state.account_id = user["account_id"]
-            st.rerun()
         else:
             st.error("Invalid email or password.")
 
@@ -295,7 +293,8 @@ def render_sidebar():
             
             for key in list(st.session_state.keys()):
                 del st.session_state[key]
-            st.rerun()
+            st.info("Logging out...")
+            st.stop()
 
 
 # ═════════════════════════════════════════════════════════════════════════
