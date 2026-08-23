@@ -45,6 +45,16 @@ def _get_collection():
     return client[DB_NAME][COLLECTION_NAME]
 
 
+def _get_collection_by_name(name: str):
+    """Return the specified collection from MongoDB."""
+    if not MONGO_URI:
+        raise RuntimeError(
+            "MONGO_URI not set. Add it to .env or export it as an env var."
+        )
+    client = MongoClient(MONGO_URI)
+    return client[DB_NAME][name]
+
+
 # ═════════════════════════════════════════════════════════════════════════
 # CRUD FUNCTIONS
 # ═════════════════════════════════════════════════════════════════════════
@@ -211,6 +221,33 @@ def delete_thread_checkpoints(thread_id: str) -> bool:
         conn.close()
 
 
+def blacklist_token(token: str) -> bool:
+    """
+    Store the blacklisted token in token_blacklist collection.
+    Creates a TTL index on blacklisted_at set to expire after 86400 seconds (24 hours).
+    """
+    coll = _get_collection_by_name("token_blacklist")
+    try:
+        coll.create_index("blacklisted_at", expireAfterSeconds=86400)
+    except Exception as e:
+        print(f"Warning: could not create TTL index: {e}")
+        
+    doc = {
+        "token": token,
+        "blacklisted_at": datetime.utcnow()
+    }
+    result = coll.insert_one(doc)
+    return result.acknowledged
+
+
+def is_token_blacklisted(token: str) -> bool:
+    """
+    Check if a token is in the token_blacklist collection.
+    """
+    coll = _get_collection_by_name("token_blacklist")
+    return coll.find_one({"token": token}) is not None
+
+
 # ═════════════════════════════════════════════════════════════════════════
 # SEED + TEST
 # ═════════════════════════════════════════════════════════════════════════
@@ -307,6 +344,15 @@ if __name__ == "__main__":
         print("  ✅ PASS — Thread 'thread-test-001' successfully deleted from MongoDB")
     else:
         print(f"  ❌ FAIL — Thread 'thread-test-001' still exists: {threads}")
+
+    # ── Test 7: Blacklist Token ──────────────────────────────────────────
+    print("\n── Test 7: blacklist_token + is_token_blacklisted ──")
+    test_token = "eyTestTokenBlacklist123"
+    blacklist_token(test_token)
+    if is_token_blacklisted(test_token):
+        print("  ✅ PASS — Token successfully blacklisted and checked")
+    else:
+        print("  ❌ FAIL — Token was not blacklisted")
 
     print("\n" + "=" * 60)
     print("ALL TESTS COMPLETE")

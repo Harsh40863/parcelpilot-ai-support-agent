@@ -19,6 +19,8 @@ dependencies = [
     "sentence-transformers>=6.0.0",
     "streamlit>=1.62.0",
     "tiktoken>=0.14.0",
+    "pyjwt>=2.13.0",
+    "extra-streamlit-components>=0.1.81",
 ]
 
 [project.scripts]

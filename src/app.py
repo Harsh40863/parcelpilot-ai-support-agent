@@ -29,6 +29,11 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
+import os
+import jwt
+import datetime
+import extra_streamlit_components as stx
+
 from agent import build_agent  # noqa: E402
 from db_users import (  # noqa: E402
     add_thread_to_user,
@@ -36,6 +41,8 @@ from db_users import (  # noqa: E402
     get_user_threads,
     delete_thread_from_user,
     delete_thread_checkpoints,
+    blacklist_token,
+    is_token_blacklisted,
 )
 
 
@@ -59,6 +66,45 @@ def init_session():
 
 
 init_session()
+
+
+@st.cache_resource
+def get_cookie_manager():
+    return stx.CookieManager(key="cookie_manager")
+
+
+def check_jwt_cookie():
+    cookie_manager = get_cookie_manager()
+    cookies = cookie_manager.get_all()
+    
+    if cookies is None:
+        st.write("Initializing session...")
+        st.stop()
+        
+    token = cookies.get("parcelpilot_jwt")
+    if token:
+        if not st.session_state.get("authenticated"):
+            try:
+                secret_key = os.environ.get("JWT_SECRET_KEY")
+                if not secret_key:
+                    st.error("JWT_SECRET_KEY is not configured.")
+                    return
+                
+                payload = jwt.decode(token, secret_key, algorithms=["HS256"])
+                
+                if is_token_blacklisted(token):
+                    cookie_manager.delete("parcelpilot_jwt", key="delete_blacklisted_jwt")
+                    st.rerun()
+                    return
+                
+                st.session_state.authenticated = True
+                st.session_state.email = payload["email"]
+                st.session_state.account_id = payload["account_id"]
+                st.rerun()
+                
+            except (jwt.ExpiredSignatureError, jwt.InvalidTokenError):
+                cookie_manager.delete("parcelpilot_jwt", key="delete_expired_jwt")
+                st.rerun()
 
 
 # ═════════════════════════════════════════════════════════════════════════
@@ -136,6 +182,27 @@ def render_login():
 
         user = authenticate_user(email_clean, password_clean)
         if user:
+            secret_key = os.environ.get("JWT_SECRET_KEY")
+            if not secret_key:
+                st.error("JWT_SECRET_KEY is not configured.")
+                return
+            
+            payload = {
+                "email": user["email"],
+                "account_id": user["account_id"],
+                "exp": datetime.datetime.utcnow() + datetime.timedelta(hours=24)
+            }
+            token = jwt.encode(payload, secret_key, algorithm="HS256")
+            
+            cookie_manager = get_cookie_manager()
+            expires = datetime.datetime.now() + datetime.timedelta(hours=24)
+            cookie_manager.set(
+                "parcelpilot_jwt",
+                token,
+                key="set_login_jwt",
+                expires_at=expires
+            )
+            
             st.session_state.authenticated = True
             st.session_state.email = user["email"]
             st.session_state.account_id = user["account_id"]
@@ -219,6 +286,12 @@ def render_sidebar():
 
         # ── Logout ───────────────────────────────────────────────────────
         if st.button("🚪 Logout", use_container_width=True):
+            cookie_manager = get_cookie_manager()
+            token = cookie_manager.get("parcelpilot_jwt")
+            if token:
+                blacklist_token(token)
+            cookie_manager.delete("parcelpilot_jwt", key="logout_delete_jwt")
+            
             for key in list(st.session_state.keys()):
                 del st.session_state[key]
             st.rerun()
@@ -444,6 +517,8 @@ def render_chat():
 # MAIN
 # ═════════════════════════════════════════════════════════════════════════
 def main():
+    check_jwt_cookie()
+    
     if not st.session_state.authenticated:
         render_login()
     else:
