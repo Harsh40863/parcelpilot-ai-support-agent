@@ -19,6 +19,8 @@ Design decisions:
 
 import os
 from pathlib import Path
+import sqlite3
+from datetime import datetime
 
 import bcrypt
 from dotenv import load_dotenv
@@ -93,35 +95,120 @@ def authenticate_user(email: str, password: str) -> dict | None:
     if not bcrypt.checkpw(password.encode("utf-8"), user["password_hash"]):
         return None
 
+    threads = get_user_threads(email)
+
     return {
         "email": user["email"],
         "account_id": user["account_id"],
-        "thread_ids": user.get("thread_ids", []),
+        "thread_ids": threads,
     }
 
 
-def add_thread_to_user(email: str, thread_id: str) -> bool:
+def add_thread_to_user(email: str, thread_id: str, label: str = "New conversation") -> bool:
     """
-    Append a thread_id to the user's thread list.
+    Append a thread object to the user's thread list, or update an existing thread's label.
 
-    Uses $addToSet to avoid duplicates.
     Returns True if the user was found and updated.
     """
     coll = _get_collection()
-    result = coll.update_one(
-        {"email": email},
-        {"$addToSet": {"thread_ids": thread_id}},
-    )
-    return result.matched_count > 0
+    
+    # Check if the thread_id already exists in the array
+    user = coll.find_one({"email": email, "thread_ids.thread_id": thread_id})
+    
+    if user:
+        # Update existing thread's label
+        result = coll.update_one(
+            {"email": email, "thread_ids.thread_id": thread_id},
+            {"$set": {"thread_ids.$.label": label}}
+        )
+        return result.matched_count > 0
+    else:
+        # Append new thread object
+        created_at = datetime.utcnow().isoformat() + "Z"
+        new_thread = {
+            "thread_id": thread_id,
+            "label": label,
+            "created_at": created_at
+        }
+        result = coll.update_one(
+            {"email": email},
+            {"$push": {"thread_ids": new_thread}}
+        )
+        return result.matched_count > 0
 
 
-def get_user_threads(email: str) -> list[str]:
-    """Return the list of thread_ids for a user, or empty list if not found."""
+def get_user_threads(email: str) -> list[dict]:
+    """Return the list of thread objects for a user, or empty list if not found.
+    
+    Performs on-the-fly migration for any legacy string thread_ids.
+    """
     coll = _get_collection()
     user = coll.find_one({"email": email}, {"thread_ids": 1})
     if not user:
         return []
-    return user.get("thread_ids", [])
+        
+    raw_threads = user.get("thread_ids", [])
+    threads = []
+    updated = False
+    
+    for t in raw_threads:
+        if isinstance(t, str):
+            # Migrate on-the-fly
+            threads.append({
+                "thread_id": t,
+                "label": "New conversation",
+                "created_at": datetime.utcnow().isoformat() + "Z"
+            })
+            updated = True
+        elif isinstance(t, dict):
+            threads.append(t)
+            
+    if updated:
+        coll.update_one({"email": email}, {"$set": {"thread_ids": threads}})
+        
+    return threads
+
+
+def delete_thread_from_user(email: str, thread_id: str) -> bool:
+    """
+    Remove a thread_id entry from the user's thread_ids array in MongoDB using $pull.
+    Supports both new object format and legacy string format.
+    """
+    coll = _get_collection()
+    # Pull object format
+    res1 = coll.update_one(
+        {"email": email},
+        {"$pull": {"thread_ids": {"thread_id": thread_id}}}
+    )
+    # Pull legacy string format
+    res2 = coll.update_one(
+        {"email": email},
+        {"$pull": {"thread_ids": thread_id}}
+    )
+    return res1.modified_count > 0 or res2.modified_count > 0
+
+
+def delete_thread_checkpoints(thread_id: str) -> bool:
+    """
+    Delete all checkpoints and writes associated with a given thread_id 
+    from the SqliteSaver checkpointer (chat_memory.db).
+    """
+    db_path = PROJECT_ROOT / "data" / "processed" / "chat_memory.db"
+    if not db_path.exists():
+        return False
+        
+    conn = sqlite3.connect(str(db_path))
+    try:
+        with conn:
+            c1 = conn.execute("DELETE FROM checkpoints WHERE thread_id = ?", (thread_id,))
+            c2 = conn.execute("DELETE FROM writes WHERE thread_id = ?", (thread_id,))
+            rows_deleted = c1.rowcount + c2.rowcount
+            return rows_deleted > 0
+    except Exception as e:
+        print(f"Error deleting checkpoints for thread {thread_id}: {e}")
+        return False
+    finally:
+        conn.close()
 
 
 # ═════════════════════════════════════════════════════════════════════════
@@ -190,19 +277,36 @@ if __name__ == "__main__":
 
     # ── Test 5: Add thread and retrieve ──────────────────────────────────
     print("\n── Test 5: add_thread_to_user + get_user_threads ──")
-    add_thread_to_user("northstar@test.com", "thread-test-001")
-    add_thread_to_user("northstar@test.com", "thread-test-002")
-    add_thread_to_user("northstar@test.com", "thread-test-001")  # duplicate — should be ignored
+    add_thread_to_user("northstar@test.com", "thread-test-001", "Test Label 1")
+    add_thread_to_user("northstar@test.com", "thread-test-002", "Test Label 2")
+    add_thread_to_user("northstar@test.com", "thread-test-001", "Test Label 1 Updated")  # update label — shouldn't duplicate
     threads = get_user_threads("northstar@test.com")
-    if "thread-test-001" in threads and "thread-test-002" in threads and len(threads) >= 2:
+    thread_ids = [t["thread_id"] for t in threads]
+    if "thread-test-001" in thread_ids and "thread-test-002" in thread_ids and len(threads) >= 2:
         print(f"  ✅ PASS — Threads: {threads}")
         # Check no duplicate
-        if threads.count("thread-test-001") == 1:
-            print("  ✅ PASS — No duplicate thread_ids ($addToSet works)")
+        if thread_ids.count("thread-test-001") == 1:
+            print("  ✅ PASS — No duplicate thread_ids")
+            # Check label update
+            t1 = next(t for t in threads if t["thread_id"] == "thread-test-001")
+            if t1["label"] == "Test Label 1 Updated":
+                print("  ✅ PASS — Label successfully updated")
+            else:
+                print(f"  ❌ FAIL — Expected label 'Test Label 1 Updated', got '{t1['label']}'")
         else:
             print("  ❌ FAIL — Duplicate thread_id found")
     else:
         print(f"  ❌ FAIL — Got: {threads}")
+
+    # ── Test 6: Delete thread ────────────────────────────────────────────
+    print("\n── Test 6: delete_thread_from_user ──")
+    delete_thread_from_user("northstar@test.com", "thread-test-001")
+    threads = get_user_threads("northstar@test.com")
+    thread_ids = [t["thread_id"] for t in threads]
+    if "thread-test-001" not in thread_ids:
+        print("  ✅ PASS — Thread 'thread-test-001' successfully deleted from MongoDB")
+    else:
+        print(f"  ❌ FAIL — Thread 'thread-test-001' still exists: {threads}")
 
     print("\n" + "=" * 60)
     print("ALL TESTS COMPLETE")

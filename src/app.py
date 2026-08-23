@@ -30,7 +30,13 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from agent import build_agent  # noqa: E402
-from db_users import add_thread_to_user, authenticate_user, get_user_threads  # noqa: E402
+from db_users import (  # noqa: E402
+    add_thread_to_user,
+    authenticate_user,
+    get_user_threads,
+    delete_thread_from_user,
+    delete_thread_checkpoints,
+)
 
 
 # ═════════════════════════════════════════════════════════════════════════
@@ -163,14 +169,51 @@ def render_sidebar():
         if not threads:
             st.caption("No conversations yet. Click '➕ New Conversation' to start.")
         else:
-            for tid in reversed(threads):  # newest first
-                label = f"💬 {tid[:8]}…"
+            for t in reversed(threads):  # newest first
+                tid = t["thread_id"]
+                label_text = t.get("label", "New conversation")
+                if not label_text:
+                    label_text = "New conversation"
+                
+                display_label = label_text
+                if len(display_label) > 28:
+                    display_label = display_label[:28].rstrip() + "..."
+                
                 is_active = tid == st.session_state.active_thread_id
                 button_type = "primary" if is_active else "secondary"
-                if st.button(label, key=f"thread_{tid}",
-                             use_container_width=True, type=button_type):
-                    st.session_state.active_thread_id = tid
-                    st.rerun()
+                
+                if st.session_state.get("deleting_thread_id") == tid:
+                    st.markdown(f"**Delete conversation?**\n*{display_label}*")
+                    col_yes, col_no = st.columns(2)
+                    with col_yes:
+                        if st.button("Yes", key=f"confirm_yes_{tid}", type="primary", use_container_width=True):
+                            delete_thread_from_user(st.session_state.email, tid)
+                            delete_thread_checkpoints(tid)
+                            
+                            if st.session_state.active_thread_id == tid:
+                                remaining_threads = [x for x in threads if x["thread_id"] != tid]
+                                if remaining_threads:
+                                    st.session_state.active_thread_id = remaining_threads[-1]["thread_id"]
+                                else:
+                                    st.session_state.active_thread_id = None
+                            
+                            st.session_state.deleting_thread_id = None
+                            st.rerun()
+                    with col_no:
+                        if st.button("Cancel", key=f"confirm_no_{tid}", use_container_width=True):
+                            st.session_state.deleting_thread_id = None
+                            st.rerun()
+                else:
+                    col_btn, col_del = st.columns([5, 1])
+                    with col_btn:
+                        if st.button(f"💬 {display_label}", key=f"thread_{tid}",
+                                     use_container_width=True, type=button_type):
+                            st.session_state.active_thread_id = tid
+                            st.rerun()
+                    with col_del:
+                        if st.button("🗑", key=f"del_{tid}", use_container_width=True):
+                            st.session_state.deleting_thread_id = tid
+                            st.rerun()
 
         st.divider()
 
@@ -354,6 +397,7 @@ def render_chat():
 
     # ── Load and display past messages ───────────────────────────────────
     messages = load_thread_messages(graph, thread_id, account_id)
+    is_new_thread = len(messages) == 0
     display_history(messages)
 
     # ── Check for pending HITL interrupts ────────────────────────────────
@@ -370,6 +414,12 @@ def render_chat():
 
         config = _make_config(thread_id, account_id)
 
+        if is_new_thread:
+            label = prompt.strip()
+            if len(label) > 45:
+                label = label[:45] + "..."
+            add_thread_to_user(st.session_state.email, thread_id, label)
+
         # Stream the agent response
         with st.chat_message("assistant"):
             full_text, tools_used = stream_agent_response(
@@ -378,18 +428,15 @@ def render_chat():
                 config,
             )
 
-
-
             if tools_used:
                 names_str = ", ".join(tools_used)
                 with st.expander(f"🔧 Used: {names_str}"):
                     for t in tools_used:
                         st.text(t)
 
-        # Check if the agent hit an interrupt (escalation approval needed)
-        # — if so, rerun to show the approval UI
+        # Check if the agent hit an interrupt or if we need to refresh the sidebar label
         new_interrupts = get_pending_interrupts(graph, thread_id, account_id)
-        if new_interrupts:
+        if new_interrupts or is_new_thread:
             st.rerun()
 
 
